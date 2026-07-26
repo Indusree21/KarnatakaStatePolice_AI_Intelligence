@@ -1,4 +1,9 @@
 import { useState } from "react";
+import {
+  FaPaperclip,
+  FaMicrophone,
+  FaPaperPlane,
+} from "react-icons/fa";
 
 function ChatInput({ onSend }) {
   const [query, setQuery] = useState("");
@@ -11,24 +16,40 @@ function ChatInput({ onSend }) {
   };
 
   return (
-    <div className="border-t pt-4 flex gap-3">
-      <button className="bg-gray-200 px-3 py-2 rounded">📎</button>
+    <div className="border-t pt-4 mt-4">
+      <div className="flex items-center gap-3">
 
-      <button className="bg-gray-200 px-3 py-2 rounded">🎤</button>
+        {/* Upload Button */}
+        <button className="w-11 h-11 rounded-full bg-gray-200 hover:bg-gray-300 flex items-center justify-center">
+          <FaPaperclip />
+        </button>
 
-      <input
-        className="flex-1 border rounded px-4"
-        placeholder="Ask anything..."
-        value={query}
-        onChange={(e) => setQuery(e.target.value)}
-      />
+        {/* Voice Button */}
+        <button className="w-11 h-11 rounded-full bg-gray-200 hover:bg-gray-300 flex items-center justify-center">
+          <FaMicrophone />
+        </button>
 
-      <button
-        onClick={handleSend}
-        className="bg-blue-900 text-white px-5 rounded"
-      >
-        Send
-      </button>
+        {/* Input */}
+        <input
+          type="text"
+          placeholder="Ask about FIRs, suspects, crime trends..."
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") handleSend();
+          }}
+          className="flex-1 border rounded-full px-5 py-3 outline-none focus:ring-2 focus:ring-blue-700"
+        />
+
+        {/* Send Button */}
+        <button
+          onClick={handleSend}
+          className="w-12 h-12 rounded-full bg-blue-700 hover:bg-blue-800 text-white flex items-center justify-center"
+        >
+          <FaPaperPlane />
+        </button>
+
+      </div>
     </div>
   );
 }

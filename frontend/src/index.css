@@ -1,0 +1,81 @@
+@import "tailwindcss";
+
+/* --------------------------------------------------
+   Animations & Transitions for Dynamic Visualizations
+-------------------------------------------------- */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Custom Scrollbar for Chat & Drawers */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* --------------------------------------------------
+   Print / Export PDF Optimization Styles
+-------------------------------------------------- */
+@media print {
+  /* Hide non-essential navigation, inputs, and controls during export */
+  header,
+  nav,
+  button,
+  .no-print,
+  input,
+  form {
+    display: none !important;
+  }
+
+  /* Optimize page layout for official police case report exports */
+  body {
+    background: #ffffff !important;
+    color: #000000 !important;
+    font-size: 12pt;
+  }
+
+  .shadow-lg,
+  .shadow-md,
+  .shadow-sm {
+    box-shadow: none !important;
+  }
+
+  .border {
+    border-color: #d1d5db !important;
+  }
+
+  /* Force expanded scroll containers so full conversation prints */
+  .h-\[450px\] {
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  /* Clean page breaks */
+  .page-break {
+    page-break-before: always;
+  }
+}

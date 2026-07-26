@@ -1,0 +1,34 @@
+# Environment variables — never commit secrets
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+.venv/
+venv/
+env/
+
+# Database (local only)
+*.db
+*.sqlite
+*.sqlite3
+
+# ChromaDB vector store (local only)
+chroma_db/
+
+# Test files
+test_gemini.py
+
+# OS
+.DS_Store
+Thumbs.db

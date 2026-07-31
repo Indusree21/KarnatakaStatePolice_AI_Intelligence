@@ -1,131 +1,154 @@
 import React, { useState } from "react";
+import { MYSURU_15_THEFT_CASES } from "../../services/caseService";
 
-// Interactive crime hotspots in Mysuru
-const mysuruIncidents = [
-  {
-    id: "FIR-102",
-    title: "Vehicle Theft - Two Wheeler",
-    location: "Mysuru Railway Station Parking",
-    time: "15 July 2026, 09:30 PM",
-    coords: { top: "38%", left: "45%" },
-    status: "Under Investigation",
-    summary: "Hero Splendor stolen near ticket counter. CCTV captured two suspects fleeing towards Bannimantap Road.",
-  },
-  {
-    id: "FIR-118",
-    title: "Shop Burglary",
-    location: "Devaraja Market, Mysuru",
-    time: "18 July 2026, 02:15 AM",
-    coords: { top: "52%", left: "58%" },
-    status: "Suspect Identified",
-    summary: "Electronics store broken into. Cash box tampered. Latent fingerprints collected from glass display.",
-  },
-  {
-    id: "FIR-124",
-    title: "Chain Snatching",
-    location: "Gokulam 3rd Stage, Mysuru",
-    time: "21 July 2026, 06:45 PM",
-    coords: { top: "28%", left: "68%" },
-    status: "Active Alert",
-    summary: "Gold chain snatched by two helmeted riders on a black Pulsar. Camera tracking in progress.",
-  },
-];
+function CrimeMap({ onSelectFullCase }) {
+  const [selectedCase, setSelectedCase] = useState(MYSURU_15_THEFT_CASES[0]);
+  const [filterType, setFilterType] = useState("all");
 
-function CrimeMap() {
-  const [selectedCase, setSelectedCase] = useState(null);
+  const incidents = filterType === "all"
+    ? MYSURU_15_THEFT_CASES
+    : MYSURU_15_THEFT_CASES.filter(c => c.status.toLowerCase().includes(filterType));
 
   return (
-    <div className="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
-      {/* MAP HEADER */}
-      <div className="bg-slate-800 text-white px-6 py-4 flex justify-between items-center">
+    <div className="bg-white rounded-2xl shadow-lg border border-slate-200 overflow-hidden">
+      {/* Map Header */}
+      <div className="bg-slate-900 text-white px-6 py-4 flex flex-wrap justify-between items-center gap-3">
         <div>
-          <h2 className="text-xl font-bold flex items-center gap-2">
-            📍 Mysuru Region Geo-Spatial Crime Map
+          <h2 className="text-lg font-bold flex items-center gap-2">
+            📍 Mysuru District Geo-Spatial Crime Map
           </h2>
-          <p className="text-xs text-slate-300">Click any incident pin to inspect case brief</p>
+          <p className="text-xs text-slate-300">
+            Click any marker pin to inspect incident details &amp; launch full case investigation
+          </p>
         </div>
-        <span className="bg-red-500 text-white text-xs font-bold px-3 py-1 rounded-full animate-pulse">
-          3 Active Hotspots
-        </span>
+
+        <div className="flex items-center gap-2">
+          <select
+            value={filterType}
+            onChange={(e) => setFilterType(e.target.value)}
+            className="bg-slate-800 border border-slate-700 text-white text-xs rounded-lg px-3 py-1.5 font-semibold focus:outline-none"
+          >
+            <option value="all">All Statuses ({MYSURU_15_THEFT_CASES.length})</option>
+            <option value="investigation">Under Investigation</option>
+            <option value="alert">Active Alert</option>
+            <option value="suspect">Suspect Identified</option>
+          </select>
+          <span className="bg-red-500 text-white text-xs font-bold px-3 py-1 rounded-full animate-pulse shrink-0">
+            {incidents.length} Pins Plotted
+          </span>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-0">
-        {/* GEOGRAPHIC VIEW CANVAS */}
-        <div className="lg:col-span-2 relative bg-slate-100 h-[450px] p-4 flex items-center justify-center border-r border-gray-200 overflow-hidden">
-          {/* Simulated Map Visual Background */}
-          <div className="absolute inset-0 bg-[radial-gradient(#cbd5e1_1px,transparent_1px)] [background-size:16px_16px] opacity-70"></div>
-          <div className="absolute top-4 left-4 bg-white/90 backdrop-blur px-3 py-1.5 rounded-lg border border-gray-200 text-xs font-bold text-slate-700 shadow-sm">
-            🗺️ Mysuru District - Active Grid
+        {/* Interactive Visual Map Canvas */}
+        <div className="lg:col-span-2 relative bg-slate-100 h-[500px] p-4 flex items-center justify-center border-r border-slate-200 overflow-hidden">
+          {/* Simulated Map Visual Background Pattern */}
+          <div className="absolute inset-0 bg-[radial-gradient(#94a3b8_1.2px,transparent_1.2px)] [background-size:20px_20px] opacity-60"></div>
+          
+          {/* City Landmark Labels */}
+          <div className="absolute top-4 left-4 bg-white/95 backdrop-blur px-3 py-1.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-800 shadow-sm flex items-center gap-2 z-10">
+            <span>🗺️ Mysuru Urban Police Zone</span>
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
           </div>
 
-          {/* INCIDENT PINS */}
-          {mysuruIncidents.map((incident) => (
-            <button
-              key={incident.id}
-              style={{ top: incident.coords.top, left: incident.coords.left }}
-              onClick={() => setSelectedCase(incident)}
-              className="absolute group transform -translate-x-1/2 -translate-y-1/2 focus:outline-none"
-            >
-              <div className="relative flex items-center justify-center">
-                <span className="animate-ping absolute inline-flex h-8 w-8 rounded-full bg-red-400 opacity-75"></span>
-                <div className="bg-red-600 hover:bg-red-700 text-white font-bold text-xs p-2 rounded-full shadow-lg border-2 border-white flex items-center justify-center transition scale-100 group-hover:scale-125">
-                  🚨
+          <div className="absolute bottom-4 left-4 bg-slate-900/90 text-white text-[10px] px-3 py-1.5 rounded-lg backdrop-blur font-mono border border-slate-700 shadow-md">
+            GPS Center: 12.3112° N, 76.6530° E
+          </div>
+
+          {/* 15 INCIDENT MARKERS PLOTTED */}
+          {incidents.map((incident) => {
+            const isSelected = selectedCase?.id === incident.id;
+            return (
+              <button
+                key={incident.id}
+                style={{ top: incident.coords.top, left: incident.coords.left }}
+                onClick={() => setSelectedCase(incident)}
+                className={`absolute group transform -translate-x-1/2 -translate-y-1/2 focus:outline-none transition-all ${
+                  isSelected ? "z-30 scale-125" : "z-20 scale-100 hover:scale-115"
+                }`}
+              >
+                <div className="relative flex items-center justify-center">
+                  <span className={`animate-ping absolute inline-flex h-8 w-8 rounded-full opacity-75 ${
+                    isSelected ? "bg-blue-400" : "bg-red-400"
+                  }`}></span>
+                  <div className={`p-2 rounded-full shadow-xl border-2 transition flex items-center justify-center text-xs font-bold ${
+                    isSelected
+                      ? "bg-blue-700 border-yellow-300 text-white shadow-blue-500/50"
+                      : "bg-red-600 border-white text-white shadow-red-500/50"
+                  }`}>
+                    📍
+                  </div>
                 </div>
-              </div>
-              <span className="opacity-0 group-hover:opacity-100 transition-opacity bg-slate-900 text-white text-[10px] px-2 py-1 rounded absolute -bottom-7 whitespace-nowrap left-1/2 -translate-x-1/2 shadow-lg z-10">
-                {incident.id}: {incident.title}
-              </span>
-            </button>
-          ))}
+
+                {/* Marker Tooltip */}
+                <div className="opacity-0 group-hover:opacity-100 transition-opacity bg-slate-900 text-white text-[11px] px-2.5 py-1 rounded-md absolute -bottom-8 left-1/2 -translate-x-1/2 whitespace-nowrap shadow-xl z-40 border border-slate-700 font-medium pointer-events-none">
+                  <span className="font-bold text-yellow-300">{incident.id}</span>: {incident.location.split(",")[0]}
+                </div>
+              </button>
+            );
+          })}
         </div>
 
-        {/* INCIDENT DETAILS DRAWER */}
-        <div className="lg:col-span-1 p-5 bg-slate-50 flex flex-col justify-between h-[450px] overflow-y-auto">
+        {/* Crime Details Drawer / Sidebar */}
+        <div className="lg:col-span-1 p-5 bg-slate-50 flex flex-col justify-between h-[500px] overflow-y-auto">
           {selectedCase ? (
             <div className="space-y-4">
-              <div className="flex justify-between items-start border-b border-gray-200 pb-3">
+              <div className="flex justify-between items-start border-b border-slate-200 pb-3">
                 <div>
-                  <span className="text-xs font-bold text-blue-700 bg-blue-100 px-2.5 py-0.5 rounded-full">
+                  <span className="text-xs font-bold text-blue-800 bg-blue-100 border border-blue-200 px-2.5 py-0.5 rounded-full font-mono">
                     {selectedCase.id}
                   </span>
-                  <h3 className="text-lg font-bold text-gray-800 mt-1">{selectedCase.title}</h3>
+                  <h3 className="text-base font-bold text-slate-900 mt-1.5 leading-snug">
+                    {selectedCase.title}
+                  </h3>
                 </div>
                 <button
                   onClick={() => setSelectedCase(null)}
-                  className="text-gray-400 hover:text-gray-600 text-sm font-bold"
+                  className="text-slate-400 hover:text-slate-600 text-xs font-bold bg-white p-1 rounded-lg border border-slate-200"
                 >
                   ✕
                 </button>
               </div>
 
               <div>
-                <p className="text-xs text-gray-500 font-semibold uppercase">Location</p>
-                <p className="text-sm font-medium text-gray-800">{selectedCase.location}</p>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Location</p>
+                <p className="text-xs font-semibold text-slate-800 mt-0.5">{selectedCase.location}</p>
               </div>
 
               <div>
-                <p className="text-xs text-gray-500 font-semibold uppercase">Reported Time</p>
-                <p className="text-sm font-medium text-gray-800">{selectedCase.time}</p>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Reported Date</p>
+                <p className="text-xs font-semibold text-slate-800 mt-0.5">{selectedCase.date}</p>
               </div>
 
               <div>
-                <p className="text-xs text-gray-500 font-semibold uppercase">Status</p>
-                <span className="inline-block mt-1 bg-amber-100 text-amber-800 text-xs px-2.5 py-1 rounded-md font-semibold">
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Investigation Status</p>
+                <span className="inline-block mt-1 bg-amber-100 text-amber-800 border border-amber-300 text-xs px-2.5 py-0.5 rounded-full font-bold">
                   {selectedCase.status}
                 </span>
               </div>
 
               <div>
-                <p className="text-xs text-gray-500 font-semibold uppercase">Incident Brief</p>
-                <p className="text-sm text-gray-700 bg-white p-3 rounded-lg border border-gray-200 mt-1 leading-relaxed">
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Incident Brief</p>
+                <p className="text-xs text-slate-700 bg-white p-3 rounded-xl border border-slate-200 mt-1 leading-relaxed shadow-xs">
                   {selectedCase.summary}
                 </p>
               </div>
+
+              {/* View Full Case Trigger Button */}
+              <div className="pt-3 border-t border-slate-200">
+                <button
+                  onClick={() => onSelectFullCase?.(selectedCase)}
+                  className="w-full bg-blue-900 hover:bg-blue-800 text-white py-3 px-4 rounded-xl text-xs font-bold transition shadow-md flex items-center justify-center gap-2"
+                >
+                  <span>🔍</span> View Full Case Brief &amp; Network
+                </button>
+              </div>
             </div>
           ) : (
-            <div className="h-full flex flex-col items-center justify-center text-center p-6 text-gray-400">
-              <span className="text-4xl mb-2">📍</span>
-              <p className="text-sm font-medium">Click on any map marker pin to view incident details</p>
+            <div className="h-full flex flex-col items-center justify-center text-center p-6 text-slate-400 space-y-2">
+              <span className="text-4xl">📍</span>
+              <p className="text-xs font-semibold text-slate-600">Select any marker pin on the map</p>
+              <p className="text-[11px] text-slate-400">Click a marker to view crime details &amp; full investigation file</p>
             </div>
           )}
         </div>

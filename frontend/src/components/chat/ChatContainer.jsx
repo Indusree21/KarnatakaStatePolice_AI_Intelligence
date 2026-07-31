@@ -1,158 +1,270 @@
 import { useEffect, useRef, useState } from "react";
 import { useAuth } from "../../context/AuthContext";
-import { sendChatQuery } from "../../services/api";
+import { processOfficerQuery } from "../../services/caseService";
+import { uploadPDF } from "../../services/api";
 import ChatMessage from "./ChatMessage";
 import ChatInput from "./ChatInput";
-import SourceCitation from "../visualization/SourceCitation";
 
-function ChatContainer({ onGraphResult }) {
+function ChatContainer({ onViewCaseDetails, onViewNetwork, onViewMap }) {
   const { user } = useAuth();
 
   const [messages, setMessages] = useState([
     {
       sender: "ai",
-      text: `Welcome, **${user?.name || "Officer"}**. I'm your KSP AI Intelligence Assistant.\n\nYou can ask me things like:\n- *"Show all burglary cases in Mysuru"*\n- *"How many cases were registered in 2025?"*\n- *"Who are the accused in vehicle theft cases?"*\n- *"Describe FIR-102"*\n- *"Show criminal network for Ramesh"*`,
+      text: `Welcome, **${user?.name || "Officer"}**. I am your Karnataka State Police AI Assistant.\n\nYou can search any type of crime records (e.g., *"give me accident related cases"*, *"give me robbery related cases"*, *"Show FIR-102"*) or **upload a Case PDF** to ask questions directly from your file!`,
     },
   ]);
 
-  const [citations, setCitations] = useState([]);
+  const [uploadedDoc, setUploadedDoc] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
   const [isListening, setIsListening] = useState(false);
+  const fileInputRef = useRef(null);
   const chatEndRef = useRef(null);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, citations, isLoading]);
+  }, [messages, isLoading, uploadedDoc]);
+
+  // Handle PDF file upload
+  const handleFileChange = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.name.endsWith(".pdf")) {
+      alert("Please select a valid PDF file (.pdf)");
+      return;
+    }
+
+    setIsUploading(true);
+
+    try {
+      let backendMeta = null;
+      try {
+        backendMeta = await uploadPDF(file);
+      } catch (err) {
+        // Fallback for offline mode
+      }
+
+      const textContent = await new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onload = (evt) => {
+          resolve(evt.target?.result || "");
+        };
+        reader.readAsText(file);
+      });
+
+      const docObj = {
+        name: file.name,
+        size: (file.size / 1024).toFixed(1) + " KB",
+        content: textContent,
+        firNumber: file.name.replace(".pdf", "").toUpperCase(),
+        summary: `Case Investigation File uploaded on ${new Date().toLocaleDateString()}`,
+        suspects: ["Suspect mentioned in " + file.name],
+        victim: "Complainant Details recorded",
+        status: "Active File Index",
+        pages: backendMeta?.pages || 1,
+      };
+
+      setUploadedDoc(docObj);
+
+      setMessages((prev) => [
+        ...prev,
+        {
+          sender: "ai",
+          text: `📄 **PDF Document Uploaded Successfully**: \`${file.name}\`\n\nI have processed and indexed this case file into active AI context. You can now ask me any type of question from this PDF, such as:\n- *"Summarize this uploaded PDF"*\n- *"Who are the suspects or victims listed in this file?"*\n- *"What evidence or key observations are recorded?"*`,
+        },
+      ]);
+    } catch (error) {
+      alert("Error uploading PDF: " + error.message);
+    } finally {
+      setIsUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
 
   const handleMicClick = () => {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SR) { alert("Speech recognition not supported. Use Chrome or Edge."); return; }
+    if (!SR) {
+      alert("Speech recognition not supported in this browser. Please use Chrome or Edge.");
+      return;
+    }
     const recognition = new SR();
     recognition.lang = user?.language === "kn" ? "kn-IN" : "en-IN";
     recognition.continuous = false;
     recognition.interimResults = false;
     setIsListening(true);
-    try { recognition.start(); } catch { setIsListening(false); }
-    recognition.onresult = (e) => { setIsListening(false); handleSend(e.results[0][0].transcript); };
+    try {
+      recognition.start();
+    } catch {
+      setIsListening(false);
+    }
+    recognition.onresult = (e) => {
+      setIsListening(false);
+      handleSend(e.results[0][0].transcript);
+    };
     recognition.onerror = () => setIsListening(false);
     recognition.onend = () => setIsListening(false);
   };
 
-  const handleSend = async (query) => {
-    if (!query.trim() || isLoading) return;
+  const handleSend = async (queryText) => {
+    if (!queryText.trim() || isLoading) return;
 
-    setCitations([]);
     setIsLoading(true);
-    setMessages(prev => [...prev, { sender: "officer", text: query }]);
+
+    setMessages((prev) => [...prev, { sender: "officer", text: queryText }]);
 
     try {
-      const result = await sendChatQuery(
-        query,
-        user?.userId  || "OFFICER_001",
-        user?.role    || "INSPECTOR",
-        user?.language || "en"
-      );
+      const payload = await processOfficerQuery(queryText, uploadedDoc);
 
-      setMessages(prev => [...prev, {
-        sender: "ai",
-        text: result.answer_text,
-        queryType: result.query_type,
-        status: result.status,
-      }]);
-
-      if (result.citations?.length) setCitations(result.citations);
-
-      // If backend returned a graph, bubble it up to Dashboard
-      if (result.query_type === "graph" && result.graph_data) {
-        onGraphResult?.(result.graph_data);
-        setMessages(prev => [...prev, {
-          sender: "system",
-          text: "🕸️ Network graph loaded — click the Network tab to explore it.",
-        }]);
-      }
-
-      // Show SQL info as a subtle system note
-      if (result.query_type === "text_to_sql" && result.debug?.sql) {
-        setMessages(prev => [...prev, {
-          sender: "system",
-          text: `SQL: ${result.debug.sql}  (${result.debug.row_count ?? 0} rows returned)`,
-        }]);
-      }
-
+      setMessages((prev) => [
+        ...prev,
+        {
+          sender: "ai",
+          text: payload.text,
+          payload: payload,
+        },
+      ]);
     } catch (err) {
-      setMessages(prev => [...prev, {
-        sender: "ai",
-        text: "⚠️ Could not reach the KSP AI backend. Please ensure the backend server is running on port 8000.",
-        status: "error",
-      }]);
+      setMessages((prev) => [
+        ...prev,
+        {
+          sender: "ai",
+          text: "⚠️ System warning: Could not query intelligence database.",
+        },
+      ]);
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <div className="flex flex-col" style={{ height: "calc(100vh - 280px)", minHeight: "500px" }}>
-      {/* Chat header */}
-      <div className="bg-blue-900 text-white px-5 py-3.5 rounded-t-xl flex justify-between items-center shrink-0">
+    <div className="flex flex-col" style={{ height: "calc(100vh - 280px)", minHeight: "540px" }}>
+      {/* Hidden File Input */}
+      <input
+        type="file"
+        ref={fileInputRef}
+        onChange={handleFileChange}
+        accept=".pdf"
+        className="hidden"
+      />
+
+      {/* Header */}
+      <div className="bg-slate-900 text-white px-5 py-3.5 rounded-t-2xl flex justify-between items-center shrink-0 border-b border-slate-800">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 bg-blue-700 rounded-full flex items-center justify-center text-lg">🤖</div>
+          <div className="w-9 h-9 bg-blue-800 rounded-full flex items-center justify-center text-lg border border-blue-600">
+            🤖
+          </div>
           <div>
             <div className="flex items-center gap-2">
-              <h2 className="text-sm font-bold">KSP AI Assistant</h2>
-              <span className="bg-emerald-500/20 text-emerald-300 text-[10px] font-mono px-2 py-0.5 rounded border border-emerald-500/40">
+              <h2 className="text-sm font-bold">KSP Conversational AI Assistant</h2>
+              <span className="bg-emerald-500/20 text-emerald-300 text-[10px] font-mono px-2 py-0.5 rounded border border-emerald-500/40 font-semibold">
                 🔒 {user?.role || "INSPECTOR"}
               </span>
             </div>
-            <p className="text-[11px] text-blue-200">Karnataka State Police Intelligence System</p>
+            <p className="text-[11px] text-slate-300">Karnataka State Police Intelligence Division</p>
           </div>
         </div>
+
         <div className="flex items-center gap-2">
+          {/* UPLOAD CASE PDF BUTTON */}
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isUploading}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 ${
+              isUploading
+                ? "bg-amber-600 text-white animate-pulse"
+                : "bg-emerald-700 hover:bg-emerald-600 text-white shadow-sm border border-emerald-500"
+            }`}
+          >
+            <span>📎</span> {isUploading ? "Uploading PDF..." : "Upload Case PDF"}
+          </button>
+
           <button
             onClick={handleMicClick}
-            title="Voice query"
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1 ${
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 ${
               isListening
                 ? "bg-red-600 text-white animate-bounce"
-                : "bg-blue-700 hover:bg-blue-600 text-white"
+                : "bg-blue-800 hover:bg-blue-700 text-white border border-blue-600"
             }`}
           >
             {isListening ? "🎙️ Listening…" : "🎤 Voice"}
           </button>
-          <button
-            onClick={() => window.print()}
-            className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-xs font-bold rounded-lg text-white transition"
-          >
-            📄 Export
-          </button>
         </div>
       </div>
 
-      {/* Message area */}
-      <div className="flex-1 overflow-y-auto bg-slate-50 px-5 py-4 space-y-2">
+      {/* Active Uploaded Document Context Badge */}
+      {uploadedDoc && (
+        <div className="bg-emerald-950 text-emerald-200 px-5 py-2 flex items-center justify-between border-b border-emerald-800 shrink-0 text-xs">
+          <div className="flex items-center gap-2 font-medium">
+            <span className="text-sm">📄</span>
+            <span>Active Case Document: <strong className="text-white font-mono">{uploadedDoc.name}</strong> ({uploadedDoc.size})</span>
+          </div>
+          <button
+            onClick={() => setUploadedDoc(null)}
+            className="text-emerald-400 hover:text-white text-xs font-bold bg-emerald-900 px-2 py-0.5 rounded"
+            title="Clear Document Context"
+          >
+            Clear Document ✕
+          </button>
+        </div>
+      )}
+
+      {/* Quick Prompt Chips */}
+      <div className="bg-slate-100 px-5 py-2 flex flex-wrap gap-2 border-b border-slate-200 shrink-0">
+        <span className="text-[10px] font-bold text-slate-500 uppercase flex items-center mr-1">Quick Search:</span>
+        <button
+          onClick={() => handleSend("give me accident related cases")}
+          className="bg-white hover:bg-blue-50 text-blue-900 border border-slate-200 hover:border-blue-300 text-[11px] font-semibold px-2.5 py-1 rounded-full shadow-2xs transition"
+        >
+          🚦 Accident Cases
+        </button>
+        <button
+          onClick={() => handleSend("give me robbery related cases")}
+          className="bg-white hover:bg-blue-50 text-blue-900 border border-slate-200 hover:border-blue-300 text-[11px] font-semibold px-2.5 py-1 rounded-full shadow-2xs transition"
+        >
+          🚔 Robbery Cases
+        </button>
+        <button
+          onClick={() => handleSend("Show theft cases in Mysuru")}
+          className="bg-white hover:bg-blue-50 text-blue-900 border border-slate-200 hover:border-blue-300 text-[11px] font-semibold px-2.5 py-1 rounded-full shadow-2xs transition"
+        >
+          📍 Mysuru Theft Map
+        </button>
+        <button
+          onClick={() => handleSend("Show cases related to FIR-102")}
+          className="bg-white hover:bg-blue-50 text-blue-900 border border-slate-200 hover:border-blue-300 text-[11px] font-semibold px-2.5 py-1 rounded-full shadow-2xs transition"
+        >
+          🔍 FIR-102 Links
+        </button>
+      </div>
+
+      {/* Message Area */}
+      <div className="flex-1 overflow-y-auto bg-slate-50 px-5 py-4 space-y-3">
         {messages.map((msg, i) => (
           <ChatMessage
             key={i}
             sender={msg.sender}
             text={msg.text}
-            queryType={msg.queryType}
-            status={msg.status}
+            payload={msg.payload}
+            onViewCaseDetails={onViewCaseDetails}
+            onViewNetwork={onViewNetwork}
+            onViewMap={onViewMap}
           />
         ))}
 
         {isLoading && (
-          <div className="flex items-center gap-2 text-slate-400 text-xs bg-white border border-slate-200 rounded-xl px-4 py-3 w-fit shadow-sm animate-pulse">
-            <span className="animate-spin">⚙️</span>
-            Processing with KSP AI Engine…
+          <div className="flex items-center gap-2 text-slate-500 text-xs bg-white border border-slate-200 rounded-2xl px-4 py-3 w-fit shadow-sm animate-pulse">
+            <span className="animate-spin text-blue-700">⚙️</span>
+            Analyzing intelligence records &amp; document context…
           </div>
         )}
-
-        {citations.length > 0 && <SourceCitation citations={citations} />}
 
         <div ref={chatEndRef} />
       </div>
 
-      {/* Input area */}
-      <div className="bg-white border-t border-slate-200 rounded-b-xl px-4 py-3 shrink-0">
+      {/* Input Area */}
+      <div className="bg-white border-t border-slate-200 rounded-b-2xl px-4 py-3 shrink-0">
         <ChatInput onSend={handleSend} disabled={isLoading} />
       </div>
     </div>

@@ -1,13 +1,46 @@
-import React, { useState } from "react";
-import { MYSURU_15_THEFT_CASES } from "../../services/caseService";
+import React, { useEffect, useState } from "react";
+import { fetchActiveCases } from "../../services/api";
 
 function CrimeMap({ onSelectFullCase }) {
-  const [selectedCase, setSelectedCase] = useState(MYSURU_15_THEFT_CASES[0]);
+  const [cases, setCases] = useState([]);
+  const [selectedCase, setSelectedCase] = useState(null);
   const [filterType, setFilterType] = useState("all");
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+
+  useEffect(() => {
+    let isMounted = true;
+
+    fetchActiveCases("Mysuru")
+      .then((data) => {
+        if (!isMounted) return;
+        setCases(data.cases || []);
+        setSelectedCase(data.cases?.[0] || null);
+      })
+      .catch((error) => {
+        if (isMounted) setLoadError(error.message || "Unable to load active cases.");
+      })
+      .finally(() => {
+        if (isMounted) setIsLoading(false);
+      });
+
+    return () => { isMounted = false; };
+  }, []);
 
   const incidents = filterType === "all"
-    ? MYSURU_15_THEFT_CASES
-    : MYSURU_15_THEFT_CASES.filter(c => c.status.toLowerCase().includes(filterType));
+    ? cases
+    : cases.filter(c => c.status.toLowerCase().includes(filterType));
+
+  const latitudes = cases.map(c => c.latitude);
+  const longitudes = cases.map(c => c.longitude);
+  const minLat = Math.min(...latitudes);
+  const maxLat = Math.max(...latitudes);
+  const minLng = Math.min(...longitudes);
+  const maxLng = Math.max(...longitudes);
+  const markerPosition = (incident) => ({
+    top: `${maxLat === minLat ? 50 : 88 - ((incident.latitude - minLat) / (maxLat - minLat)) * 72}%`,
+    left: `${maxLng === minLng ? 50 : 12 + ((incident.longitude - minLng) / (maxLng - minLng)) * 76}%`,
+  });
 
   return (
     <div className="bg-white rounded-2xl shadow-lg border border-slate-200 overflow-hidden">
@@ -28,13 +61,13 @@ function CrimeMap({ onSelectFullCase }) {
             onChange={(e) => setFilterType(e.target.value)}
             className="bg-slate-800 border border-slate-700 text-white text-xs rounded-lg px-3 py-1.5 font-semibold focus:outline-none"
           >
-            <option value="all">All Statuses ({MYSURU_15_THEFT_CASES.length})</option>
+            <option value="all">All Statuses ({cases.length})</option>
             <option value="investigation">Under Investigation</option>
             <option value="alert">Active Alert</option>
             <option value="suspect">Suspect Identified</option>
           </select>
           <span className="bg-red-500 text-white text-xs font-bold px-3 py-1 rounded-full animate-pulse shrink-0">
-            {incidents.length} Pins Plotted
+            {incidents.length} Active Pins
           </span>
         </div>
       </div>
@@ -55,13 +88,28 @@ function CrimeMap({ onSelectFullCase }) {
             GPS Center: 12.3112° N, 76.6530° E
           </div>
 
-          {/* 15 INCIDENT MARKERS PLOTTED */}
+          {isLoading && (
+            <div className="relative z-10 bg-white/95 rounded-xl px-5 py-3 text-sm font-semibold text-slate-700 shadow-md">
+              Loading active cases for Mysuru...
+            </div>
+          )}
+          {!isLoading && loadError && (
+            <div className="relative z-10 bg-red-50 border border-red-200 rounded-xl px-5 py-3 text-sm font-semibold text-red-700 shadow-md">
+              {loadError}
+            </div>
+          )}
+          {!isLoading && !loadError && incidents.length === 0 && (
+            <div className="relative z-10 bg-white/95 rounded-xl px-5 py-3 text-sm font-semibold text-slate-700 shadow-md">
+              No active geolocated cases found in Mysuru.
+            </div>
+          )}
+
           {incidents.map((incident) => {
-            const isSelected = selectedCase?.id === incident.id;
+            const isSelected = selectedCase?.case_id === incident.case_id;
             return (
               <button
-                key={incident.id}
-                style={{ top: incident.coords.top, left: incident.coords.left }}
+                key={incident.case_id}
+                style={markerPosition(incident)}
                 onClick={() => setSelectedCase(incident)}
                 className={`absolute group transform -translate-x-1/2 -translate-y-1/2 focus:outline-none transition-all ${
                   isSelected ? "z-30 scale-125" : "z-20 scale-100 hover:scale-115"
@@ -82,7 +130,7 @@ function CrimeMap({ onSelectFullCase }) {
 
                 {/* Marker Tooltip */}
                 <div className="opacity-0 group-hover:opacity-100 transition-opacity bg-slate-900 text-white text-[11px] px-2.5 py-1 rounded-md absolute -bottom-8 left-1/2 -translate-x-1/2 whitespace-nowrap shadow-xl z-40 border border-slate-700 font-medium pointer-events-none">
-                  <span className="font-bold text-yellow-300">{incident.id}</span>: {incident.location.split(",")[0]}
+                  <span className="font-bold text-yellow-300">{incident.fir_number}</span>: {incident.location.split(",")[0]}
                 </div>
               </button>
             );
@@ -96,7 +144,7 @@ function CrimeMap({ onSelectFullCase }) {
               <div className="flex justify-between items-start border-b border-slate-200 pb-3">
                 <div>
                   <span className="text-xs font-bold text-blue-800 bg-blue-100 border border-blue-200 px-2.5 py-0.5 rounded-full font-mono">
-                    {selectedCase.id}
+                    {selectedCase.fir_number}
                   </span>
                   <h3 className="text-base font-bold text-slate-900 mt-1.5 leading-snug">
                     {selectedCase.title}

@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
 import "@xyflow/react/dist/style.css";
-import { ReactFlow, Background, Controls, MiniMap } from "@xyflow/react";
+import { ReactFlow, Background, Controls, MiniMap, MarkerType } from "@xyflow/react";
 import { generateCasePDF } from "../../utils/pdfGenerator";
 import { MOCK_CASES, MYSURU_15_THEFT_CASES, getNetworkGraphForQuery } from "../../services/caseService";
 
@@ -57,6 +57,46 @@ const NODE_STYLES = {
     padding: "10px 14px",
     fontSize: "11px",
   },
+  location: {
+    background: "#DCFCE7",
+    color: "#166534",
+    border: "2px solid #22C55E",
+    borderRadius: "12px",
+    padding: "8px 10px",
+    fontSize: "11px",
+  },
+  evidence: {
+    background: "#FEF3C7",
+    color: "#92400E",
+    border: "2px solid #F59E0B",
+    borderRadius: "12px",
+    padding: "8px 10px",
+    fontSize: "11px",
+  },
+  fraud_link: {
+    background: "#FCE7F3",
+    color: "#9D174D",
+    border: "2px solid #EC4899",
+    borderRadius: "12px",
+    padding: "8px 10px",
+    fontSize: "11px",
+  },
+  phone: {
+    background: "#E0F2FE",
+    color: "#075985",
+    border: "2px solid #0EA5E9",
+    borderRadius: "12px",
+    padding: "8px 10px",
+    fontSize: "11px",
+  },
+  bank_account: {
+    background: "#FEF3C7",
+    color: "#92400E",
+    border: "2px solid #F59E0B",
+    borderRadius: "12px",
+    padding: "8px 10px",
+    fontSize: "11px",
+  },
 };
 
 const FALLBACK_STYLE = {
@@ -70,29 +110,57 @@ const FALLBACK_STYLE = {
 
 // ─── Layout algorithm for hierarchical multi-tier tree ──────────────────────
 function computeLayout(nodes) {
+  const isCyberFraud = nodes.some(n => ["fraud_link", "phone", "bank_account"].includes(n.type));
+  if (isCyberFraud) {
+    const rows = [
+      { types: ["case"], y: 24 },
+      { types: ["victim", "fraud_link"], y: 150 },
+      { types: ["phone"], y: 285 },
+      { types: ["bank_account"], y: 420 },
+      { types: ["linked_case"], y: 555 },
+    ];
+    const positioned = {};
+    rows.forEach(({ types, y }) => {
+      const rowNodes = nodes.filter(n => types.includes(n.type));
+      const nodeWidth = 180;
+      const gap = 36;
+      const rowWidth = rowNodes.length * nodeWidth + Math.max(0, rowNodes.length - 1) * gap;
+      const startX = Math.max(20, (760 - rowWidth) / 2);
+      rowNodes.forEach((node, index) => {
+        positioned[node.id] = { x: startX + index * (nodeWidth + gap), y };
+      });
+    });
+    return positioned;
+  }
+
   const tiers = {
-    case:        { y: 30,  nodes: [] },
-    victim:      { y: 160, nodes: [] },
-    accused:     { y: 160, nodes: [] },
-    witness:     { y: 160, nodes: [] },
-    associate:   { y: 290, nodes: [] },
-    linked_case: { y: 420, nodes: [] },
+    case:     { y: 24,  nodes: [] },
+    context:  { y: 150, nodes: [] },
+    people:   { y: 285, nodes: [] },
+    evidence: { y: 420, nodes: [] },
   };
 
   nodes.forEach(n => {
-    const tierKey = n.type || "linked_case";
-    const tier = tiers[tierKey] ?? tiers.linked_case;
-    tier.nodes.push(n);
+    const tierKey = n.type === "case"
+      ? "case"
+      : ["victim", "location", "summary"].includes(n.type)
+        ? "context"
+        : ["accused", "witness", "associate"].includes(n.type)
+          ? "people"
+          : "evidence";
+    tiers[tierKey].nodes.push(n);
   });
 
   const positioned = {};
   Object.values(tiers).forEach(tier => {
     const count = tier.nodes.length;
+    const nodeWidth = tier === tiers.case ? 190 : 156;
+    const gap = 26;
+    const rowWidth = count * nodeWidth + Math.max(0, count - 1) * gap;
+    const startX = Math.max(12, (760 - rowWidth) / 2);
     tier.nodes.forEach((n, i) => {
-      const width = 680;
-      const spacing = count > 1 ? width / (count + 1) : width / 2;
       positioned[n.id] = {
-        x: spacing * (i + 1) - 60,
+        x: startX + i * (nodeWidth + gap),
         y: tier.y,
       };
     });
@@ -105,8 +173,17 @@ function toFlowNodes(nodes = []) {
   return nodes.map(n => ({
     id:       String(n.id),
     position: positions[n.id] ?? { x: Math.random() * 500, y: Math.random() * 300 },
-    data:     { label: n.label ?? n.id, meta: n.meta ?? n },
-    style:    NODE_STYLES[n.type] ?? FALLBACK_STYLE,
+    data:     { label: n.label ?? n.id, meta: { ...(n.meta ?? n), type: n.type } },
+    style:    {
+      ...(NODE_STYLES[n.type] ?? FALLBACK_STYLE),
+      width: ["case", "fraud_link", "phone", "bank_account", "linked_case"].includes(n.type) ? 180 : 156,
+      minHeight: 54,
+      whiteSpace: "pre-wrap",
+      textAlign: "center",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+    },
   }));
 }
 
@@ -118,6 +195,7 @@ function toFlowEdges(edges = []) {
     label:        e.label ?? "",
     animated:     e.source?.includes("sus") || e.source?.includes("assoc"),
     style:        { stroke: "#64748B", strokeWidth: 2 },
+    markerEnd:    { type: MarkerType.ArrowClosed, color: "#64748B" },
     labelStyle:   { fontSize: 10, fill: "#475569", fontWeight: "600" },
     labelBgStyle: { fill: "#FFFFFF", fillOpacity: 0.9 },
   }));
@@ -155,6 +233,11 @@ function DetailPanel({ meta, onGeneratePDF }) {
     witness:     "👁️",
     associate:   "🔗",
     linked_case: "📁",
+    location:    "📍",
+    evidence:    "🔎",
+    fraud_link:  "🔗",
+    phone:       "📱",
+    bank_account:"🏦",
   };
 
   const icon = TYPE_ICONS[meta.type] ?? "🔵";
@@ -245,7 +328,7 @@ function NetworkGraph({ nodes: initialNodes, edges: initialEdges, caseData: init
   // Combine list of all FIRs for quick dropdown selector
   const allFirs = Array.from(new Set([
     ...MOCK_CASES.map(c => c.firNumber),
-    ...MYSURU_15_THEFT_CASES.map(c => c.id)
+    ...MYSURU_15_THEFT_CASES.map(c => c.id).filter(Boolean),
   ]));
 
   return (
@@ -302,10 +385,27 @@ function NetworkGraph({ nodes: initialNodes, edges: initialEdges, caseData: init
         <div className="flex flex-wrap items-center gap-2">
           <LegendChip color="#1E3A8A" border="#1E3A8A" label="FIR Case" />
           <LegendChip color="#DBEAFE" border="#3B82F6" label="Victim" />
-          <LegendChip color="#FEE2E2" border="#EF4444" label="Suspect" />
-          <LegendChip color="#FEF9C3" border="#EAB308" label="Witness" />
-          <LegendChip color="#F3E8FF" border="#A855F7" label="Associate" />
-          <LegendChip color="#F1F5F9" border="#64748B" label="Prior FIR" />
+          {currentCase?.source === "local_fir" && currentCase?.crimeType?.toLowerCase().includes("fraud") ? (
+            <>
+              <LegendChip color="#FCE7F3" border="#EC4899" label="Fraud Link" />
+              <LegendChip color="#E0F2FE" border="#0EA5E9" label="Phone" />
+              <LegendChip color="#FEF3C7" border="#F59E0B" label="Bank Account" />
+              <LegendChip color="#F1F5F9" border="#64748B" label="Linked Case" />
+            </>
+          ) : currentCase?.source === "local_fir" ? (
+            <>
+              <LegendChip color="#FEE2E2" border="#EF4444" label="Suspect" />
+              <LegendChip color="#DCFCE7" border="#22C55E" label="Location" />
+              <LegendChip color="#FEF3C7" border="#F59E0B" label="Summary / Evidence" />
+            </>
+          ) : (
+            <>
+              <LegendChip color="#FEE2E2" border="#EF4444" label="Suspect" />
+              <LegendChip color="#FEF9C3" border="#EAB308" label="Witness" />
+              <LegendChip color="#F3E8FF" border="#A855F7" label="Associate" />
+              <LegendChip color="#F1F5F9" border="#64748B" label="Prior FIR" />
+            </>
+          )}
         </div>
       </div>
 
@@ -330,6 +430,8 @@ function NetworkGraph({ nodes: initialNodes, edges: initialEdges, caseData: init
                 const type = n.data?.meta?.type ?? "";
                 return type === "accused" ? "#EF4444"
                   : type === "victim"      ? "#3B82F6"
+                  : type === "location"    ? "#22C55E"
+                  : type === "evidence"    ? "#F59E0B"
                   : type === "witness"     ? "#EAB308"
                   : type === "associate"   ? "#A855F7"
                   : type === "case"        ? "#1E3A8A"

@@ -20,11 +20,151 @@ export const RESPONSE_TYPES = {
 
 // ─── HELPER: GENERATE UNIQUE NETWORK GRAPH FOR ANY REGISTERED CASE ─────────
 
+function extractSummarySuspects(summary) {
+  return [...new Set(
+    [...summary.matchAll(/(?:suspect|accused|offender|perpetrator)(?:s)?\s+(?:is|are|named|identified as|called|:)?\s*([A-Za-z][A-Za-z .'-]{2,40})/gi)]
+      .map((match) => match[1].split(/\s+(?:and|who|was|were|used|uses|in|near|with|on)\s+/i)[0].trim())
+      .filter((name) => name.length > 2)
+  )];
+}
+
+function extractCyberFraudEntities(summary, currentFir) {
+  const phoneMatch = summary.match(/(?:phone|mobile|contact)\s*(?:number|no\.?|#)?\s*[:\-]?\s*(\+?\d[\d\s-]{8,})/i);
+  const bankMatch = summary.match(/(?:bank account|account number|a\/c)\s*(?:number|no\.?|#)?\s*[:\-]?\s*([A-Z0-9-]{5,})/i);
+  const linkMatch = summary.match(/((?:fraudulent|fake|phishing|malicious)\s+link|https?:\/\/\S+)/i);
+  const caseNumbers = [...summary.matchAll(/\b(?:case|fir)\s*[-#]?\s*(\d{3,})\b/gi)]
+    .map((match) => match[1])
+    .filter((caseNumber, index, values) => values.indexOf(caseNumber) === index && !String(currentFir).includes(caseNumber));
+
+  return {
+    link: linkMatch?.[1] || "Fraudulent Link",
+    phone: phoneMatch?.[1]?.trim() || "Phone Number",
+    bank: bankMatch?.[1]?.trim() || "Bank Account",
+    caseNumbers,
+  };
+}
+
 export function generateUniqueNetworkGraph(caseObj) {
   const firId = caseObj.firNumber || caseObj.id || "FIR-100";
   const title = caseObj.crimeType || caseObj.incidentType || caseObj.title || "Investigation Record";
   const location = caseObj.location || "Mysuru District";
   const victimName = caseObj.victim || caseObj.complainantName || "Complainant Statement Recorded";
+  const summary = caseObj.summary || caseObj.description || "Investigation details recorded in the FIR.";
+
+  if (caseObj.source === "local_fir") {
+    const isCyberFraud = /cyber|online fraud|fraudulent link|fake link|phishing|otp|bank account|account number|phone number|mobile number|unauthorized transaction|financial fraud/i.test(`${title} ${summary}`);
+    if (isCyberFraud) {
+      const { link, phone, bank, caseNumbers } = extractCyberFraudEntities(summary, firId);
+      const nodes = [
+        {
+          id: `case_${firId}`,
+          label: `📋 ${title.toUpperCase()}\n${firId}`,
+          type: "case",
+          meta: { FIR: firId, CrimeType: title, Status: caseObj.status || "Registered", summary },
+        },
+        {
+          id: `victim_${firId}`,
+          label: `👤 ${String(victimName).split("(")[0].trim()}`,
+          type: "victim",
+          meta: { name: victimName, role: "Victim / Complainant", statement: summary },
+        },
+        {
+          id: `link_${firId}`,
+          label: `🔗 ${link}`,
+          type: "fraud_link",
+          meta: { value: link, role: "Fraudulent link", source: summary },
+        },
+        {
+          id: `phone_${firId}`,
+          label: `📱 ${phone}`,
+          type: "phone",
+          meta: { value: phone, role: "Phone number used in fraud", source: summary },
+        },
+        {
+          id: `bank_${firId}`,
+          label: `🏦 ${bank}`,
+          type: "bank_account",
+          meta: { value: bank, role: "Bank account / money trail", source: summary },
+        },
+      ];
+      const edges = [
+        { id: `e_victim_${firId}`, source: `victim_${firId}`, target: `case_${firId}`, label: "Reported" },
+        { id: `e_link_${firId}`, source: `case_${firId}`, target: `link_${firId}`, label: "Used" },
+        { id: `e_phone_${firId}`, source: `link_${firId}`, target: `phone_${firId}`, label: "Redirected to" },
+        { id: `e_bank_${firId}`, source: `phone_${firId}`, target: `bank_${firId}`, label: "Requested payment" },
+      ];
+
+      caseNumbers.forEach((caseNumber, index) => {
+        const linkedId = `linked_case_${firId}_${caseNumber}`;
+        nodes.push({
+          id: linkedId,
+          label: `📁 Case ${caseNumber}`,
+          type: "linked_case",
+          meta: { FIR: `Case ${caseNumber}`, role: "Linked fraud case", source: summary },
+        });
+        edges.push({ id: `e_case_${firId}_${index}`, source: `bank_${firId}`, target: linkedId, label: "Shared account" });
+      });
+
+      return { nodes, edges };
+    }
+
+    const suspectsList = [...new Set([
+      ...(Array.isArray(caseObj.suspects) ? caseObj.suspects : []),
+      ...extractSummarySuspects(summary),
+    ])];
+    const evidenceTerms = [...new Set(summary.match(/\b(?:CCTV|camera|vehicle|weapon|knife|phone|mobile|cash|jewellery|jewelry|fingerprint|witness|document)\b/gi) || [])];
+    const caseNodeId = `case_${firId}`;
+    const nodes = [
+      {
+        id: caseNodeId,
+        label: `📋 ${firId}\n${title.slice(0, 20)}`,
+        type: "case",
+        meta: { FIR: firId, CrimeType: title, Location: location, Date: caseObj.date || "2026", Status: caseObj.status || "Registered" },
+      },
+      {
+        id: `complainant_${firId}`,
+        label: `👤 Complainant\n${String(victimName).split("(")[0].slice(0, 18)}`,
+        type: "victim",
+        meta: { name: victimName, role: "Complainant / Victim", location, statement: summary },
+      },
+      {
+        id: `summary_${firId}`,
+        label: `📝 Incident Summary\n${summary.slice(0, 18)}...`,
+        type: "evidence",
+        meta: { summary, source: "New FIR submission" },
+      },
+      {
+        id: `location_${firId}`,
+        label: `📍 Location\n${location.slice(0, 18)}`,
+        type: "location",
+        meta: { location, role: "Incident location" },
+      },
+    ];
+    const edges = [
+      { id: `e_complainant_${firId}`, source: `complainant_${firId}`, target: caseNodeId, label: "Reported / Victim" },
+      { id: `e_summary_${firId}`, source: `summary_${firId}`, target: caseNodeId, label: "Describes incident" },
+      { id: `e_location_${firId}`, source: `location_${firId}`, target: caseNodeId, label: "Occurred at" },
+    ];
+
+    suspectsList.forEach((suspect, index) => {
+      const suspectId = `suspect_${firId}_${index}`;
+      nodes.push({
+        id: suspectId,
+        label: `🚔 Suspect\n${suspect.slice(0, 18)}`,
+        type: "accused",
+        meta: { name: suspect, role: "Person mentioned in submitted summary", source: summary },
+      });
+      edges.push({ id: `e_suspect_${firId}_${index}`, source: suspectId, target: caseNodeId, label: "Mentioned in summary" });
+    });
+
+    evidenceTerms.forEach((term, index) => {
+      const evidenceId = `evidence_${firId}_${index}`;
+      nodes.push({ id: evidenceId, label: `🔎 Evidence\n${term}`, type: "evidence", meta: { item: term, source: summary } });
+      edges.push({ id: `e_evidence_${firId}_${index}`, source: evidenceId, target: `summary_${firId}`, label: "Found in summary" });
+    });
+
+    return { nodes, edges };
+  }
   
   const suspectsList = Array.isArray(caseObj.suspects)
     ? caseObj.suspects
@@ -233,11 +373,12 @@ export function getAllRegisteredCases() {
         location: f.location || "Mysuru District",
         district: "Mysuru Urban",
         victim: f.complainantName ? `${f.complainantName} (Ph: ${f.contactNumber || "N/A"})` : "Complainant Statement Recorded",
-        suspects: [`Suspect under tracking for ${f.firNumber}`],
+        suspects: extractSummarySuspects(f.description || ""),
         evidence: ["FIR Complaint Document", "Officer Preliminary Report"],
         observations: [f.description || "Fresh FIR registered via KSP Police Portal."],
         status: f.status || "Pending Investigation",
         summary: f.description || `Registered complaint for ${f.incidentType} filed by ${f.complainantName}.`,
+        source: "local_fir",
       }));
     }
   } catch {
@@ -292,6 +433,21 @@ export function getNetworkGraphForQuery(queryOrFir) {
 export async function processOfficerQuery(query, uploadedDoc = null) {
   const q = query.trim().toLowerCase();
   const allCases = getAllRegisteredCases();
+
+  // Local FIRs are saved in this browser and must be resolved before the API,
+  // which only knows about the seeded backend database.
+  const localFirMatch = allCases.find(c =>
+    c.source === "local_fir" && q.includes(c.firNumber.toLowerCase())
+  );
+  if (localFirMatch) {
+    const net = generateUniqueNetworkGraph(localFirMatch);
+    return {
+      type: RESPONSE_TYPES.CASE_DETAILS,
+      text: `Here is the complete investigation file and summary-driven criminal network for **${localFirMatch.firNumber}** (${localFirMatch.crimeType}):`,
+      caseData: localFirMatch,
+      networkData: { nodes: net.nodes, edges: net.edges },
+    };
+  }
 
   // 1. PDF DOCUMENT CONTEXT QUERY
   if (uploadedDoc && (q.includes("pdf") || q.includes("uploaded") || q.includes("document") || q.includes("file") || q.includes("report") || q.includes("summarize") || q.includes("what") || q.includes("who") || q.includes("evidence"))) {

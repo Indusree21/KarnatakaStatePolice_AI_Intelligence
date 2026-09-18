@@ -25,7 +25,7 @@ function Dashboard() {
   const [firs, setFirs] = useState([]);
   
   // Selected case & network graph state
-  const [selectedCase, setSelectedCase] = useState(MOCK_CASES[0]);
+  const [selectedCase, setSelectedCase] = useState(null);
   const [graphData, setGraphData] = useState(null);
 
   useEffect(() => {
@@ -113,36 +113,35 @@ function Dashboard() {
 
               {/* 2. CASE SUMMARY TAB */}
               {activeTab === "summary" && (
-                <div>
-                  <div className="mb-4 flex flex-wrap justify-between items-center bg-slate-50 p-3 rounded-xl border border-slate-200">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-semibold text-slate-500">Active Case File:</span>
-                      <select
-                        value={selectedCase?.firNumber || "FIR-102"}
-                        onChange={(e) => {
-                          const found = MOCK_CASES.find(c => c.firNumber === e.target.value);
-                          if (found) setSelectedCase(found);
-                        }}
-                        className="bg-white border border-slate-300 font-mono font-bold text-xs rounded-lg px-3 py-1.5 focus:outline-none shadow-2xs"
-                      >
-                        {MOCK_CASES.map(c => (
-                          <option key={c.firNumber} value={c.firNumber}>
-                            {c.firNumber} — {c.crimeType}
-                          </option>
-                        ))}
-                      </select>
+                selectedCase ? (
+                  <div>
+                    <div className="mb-4 flex flex-wrap justify-between items-center bg-slate-50 p-3 rounded-xl border border-slate-200">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-semibold text-slate-500">Active Case File:</span>
+                        <span className="bg-white border border-slate-300 font-mono font-bold text-xs rounded-lg px-3 py-1.5 shadow-2xs">
+                          {selectedCase.firNumber}
+                        </span>
+                      </div>
+
+                      <span className="text-xs font-semibold text-blue-900 bg-blue-50 border border-blue-200 px-3 py-1 rounded-full">
+                        Showing complete intelligence profile
+                      </span>
                     </div>
 
-                    <span className="text-xs font-semibold text-blue-900 bg-blue-50 border border-blue-200 px-3 py-1 rounded-full">
-                      Showing complete intelligence profile
-                    </span>
+                    <CaseSummaryCard
+                      caseData={selectedCase}
+                      onViewNetwork={() => handleViewNetwork(selectedCase)}
+                    />
                   </div>
-
-                  <CaseSummaryCard
-                    caseData={selectedCase}
-                    onViewNetwork={() => handleViewNetwork(selectedCase)}
-                  />
-                </div>
+                ) : (
+                  <div className="min-h-[260px] flex flex-col items-center justify-center text-center bg-slate-50 rounded-xl border border-dashed border-slate-300 px-6">
+                    <span className="text-4xl mb-3">📄</span>
+                    <h2 className="text-sm font-bold text-slate-800">No case selected</h2>
+                    <p className="text-xs text-slate-500 mt-1 max-w-sm">
+                      Search for a FIR in the AI Assistant to display its complete case summary here.
+                    </p>
+                  </div>
+                )
               )}
 
               {/* 3. CRIMINAL NETWORK TAB */}
@@ -180,9 +179,10 @@ function Dashboard() {
               {activeTab === "map" && (
                 <CrimeMap
                   onSelectFullCase={(caseObj) => {
-                    const match = MOCK_CASES.find(c => c.firNumber === caseObj.id) || {
-                      firNumber: caseObj.id,
-                      crimeType: caseObj.title,
+                    const firNumber = caseObj.fir_number || caseObj.id || caseObj.firNumber;
+                    const match = MOCK_CASES.find(c => c.firNumber === firNumber) || {
+                      firNumber,
+                      crimeType: caseObj.title || caseObj.crime_type,
                       date: caseObj.date || caseObj.time,
                       location: caseObj.location,
                       victim: "Victim statement recorded",

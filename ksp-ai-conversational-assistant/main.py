@@ -11,7 +11,7 @@ from contextlib import asynccontextmanager
 from typing import Any, Dict, List, Literal, Optional
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
@@ -266,6 +266,55 @@ async def upload_pdf(file: UploadFile = File(...)):
     content = await file.read()
     result = ingest_pdf(file_bytes=content, filename=file.filename)
     return {"status": "indexed", **result}
+
+
+# ---------------------------------------------------------------------------
+# Active case map endpoint
+# ---------------------------------------------------------------------------
+@app.get("/api/active-cases")
+async def active_cases(district: str = Query(default="Mysuru", min_length=2)):
+    """Return visible, active, geolocated cases for the requested district."""
+    from db.database import run_query
+
+    rows = run_query(
+        """
+        SELECT
+            cm.CaseMasterID AS case_id,
+            cm.CrimeNo AS fir_number,
+            cm.CrimeRegisteredDate AS date,
+            cm.latitude,
+            cm.longitude,
+            cm.BriefFacts AS summary,
+            cs.CaseStatusName AS status,
+            csh.CrimeHeadName AS crime_type,
+            u.UnitName AS police_station,
+            d.DistrictName AS district
+        FROM CaseMaster cm
+        JOIN CaseStatusMaster cs ON cs.CaseStatusID = cm.CaseStatusID
+        LEFT JOIN CrimeSubHead csh ON csh.CrimeSubHeadID = cm.CrimeMinorHeadID
+        LEFT JOIN Unit u ON u.UnitID = cm.PoliceStationID
+        LEFT JOIN District d ON d.DistrictID = u.DistrictID
+        WHERE lower(d.DistrictName) = lower(:district)
+          AND cm.latitude IS NOT NULL
+          AND cm.longitude IS NOT NULL
+          AND lower(cs.CaseStatusName) NOT IN ('closed', 'referred to court')
+          AND cm.IsConfidential = 0
+        ORDER BY cm.CrimeRegisteredDate DESC
+        """,
+        {"district": district},
+    )
+
+    return {
+        "district": district,
+        "cases": [
+            {
+                **row,
+                "title": row["crime_type"] or "Registered Crime",
+                "location": ", ".join(filter(None, [row["police_station"], row["district"]])),
+            }
+            for row in rows
+        ],
+    }
 
 
 # ---------------------------------------------------------------------------

@@ -70,6 +70,20 @@ export async function uploadPDF(file) {
 }
 
 /**
+ * Fetch active, geolocated cases for a district from the backend database.
+ */
+export async function fetchActiveCases(district = 'Mysuru') {
+  const response = await fetch(`${API_BASE}/active-cases?district=${encodeURIComponent(district)}`);
+
+  if (!response.ok) {
+    const err = await response.text();
+    throw new Error(`Active cases error ${response.status}: ${err}`);
+  }
+
+  return response.json();
+}
+
+/**
  * Check backend health.
  * @returns {Promise<{status: string, service: string}>}
  */
